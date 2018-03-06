@@ -51,7 +51,7 @@ offset_PayloadRemainingBytes = 3
 offset_FirstField = 4
 
 # Discovery timeout. Change this for quicker discovery
-DISCOVERY_TIMEOUT = 5
+DISCOVERY_TIMEOUT = 2
 
 
 def parse_args():
@@ -117,6 +117,9 @@ def ubntDiscovery(iface):
         # Walk the reply payload, staring from offset 04 (just after reply signature and payload size).
         pointer += 1
         remaining_bytes -= 1
+        RadioModel = ""
+        RadioEssid = ""
+        RadioWlanMode = ""
         while remaining_bytes > 0:
             fieldType = payload[pointer].encode('hex')
             pointer += 1
@@ -126,6 +129,7 @@ def ubntDiscovery(iface):
             pointer += 2
             remaining_bytes -= 2
             fieldData = payload[pointer:pointer+fieldLen]
+            #print(fieldType + " ("+str(fieldLen)+") = " + fieldData.encode('hex') + " = " + fieldData)
             if  fieldType == UBNT_RADIONAME:
                 RadioName = fieldData
             elif fieldType == UBNT_MODEL_FULL:
@@ -139,7 +143,17 @@ def ubntDiscovery(iface):
             elif fieldType == UBNT_ESSID:
                 RadioEssid = fieldData
             elif fieldType == UBNT_WLAN_MODE:
-                RadioWlanMode = UBNT_WIRELESS_MODES[fieldData]
+                try:
+                    RadioWlanMode = UBNT_WIRELESS_MODES[fieldData]
+                except:
+                    pass
+            elif fieldType == UBNT_MAC_AND_IP:
+                try:
+                    RadioMAC = convertMac(fieldData.encode('hex')[0:12])
+                    RadioIP  = convertIp(fieldData.encode('hex')[12:])
+                except:
+                    pass
+
             # We don't know or care about other field types. Continue walking the payload.
             pointer += fieldLen
             remaining_bytes -= fieldLen
@@ -156,12 +170,29 @@ def ubntDiscovery(iface):
         Radio['wlan_mode']      = RadioWlanMode
         RadioList.append(Radio)
 
+        #return RadioList
+    #return []
     return RadioList
 
+def convertIp(ipHexString):
+    it = iter([ipHexString[i:i+2] for i in range(0, len(ipHexString), 2)])
+    out = str(int(next(it),16))
+    for part in it:
+        out += '.' + str(int(part,16))
+    return out
+
+def convertMac(macHexString):
+    it = iter([macHexString[i:i+2] for i in range(0, len(macHexString), 2)])
+    out = next(it).upper()
+    for part in it:
+        out += ':' + part.upper()
+    return out
+    
 
 if __name__ == '__main__':
     args = parse_args()
-    sys.stderr.write("\nDiscovery in progress...\n")
+    if args.output_format == 'text':
+        sys.stderr.write("\nDiscovery in progress...\n")
     RadioList = ubntDiscovery(args.interface)
     found_radios = len(RadioList)
     if args.output_format == 'text':
